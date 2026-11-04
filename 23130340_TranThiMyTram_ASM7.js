@@ -571,15 +571,6 @@ test.describe('6.5.1 Giỏ hàng - 23130340_TranThiMyTram_ASM7', () => {
     await expect.poll(async () => getCartSubtotal(page), { timeout: 8000 }).toBe(a.price + b.price + c.price);
   });
  
-  test.skip('CART_Add_08 - Không thể thêm sản phẩm hết hàng tại khu vực vào giỏ hàng', async () => {
-    // [BLOCKED ON PROD] Tồn kho trên web thật thay đổi theo thời gian thực, không có URL sản phẩm hết hàng cố định.
-    // Không giả lập bằng cách sửa DOM (test tự chèn giao diện rồi tự kiểm tra sẽ không phản ánh website).
-  });
- 
-  test.skip('CART_Add_09 - Không giữ giá Flash sale khi sản phẩm đã hết suất', async () => {
-    // [BLOCKED ON PROD] Chỉ kiểm tra được khi một suất Flash sale thật sự bán hết (hiển thị 0 suất), không điều khiển được.
-  });
- 
   /* --------------------------------------------------------------------------
    * PHẦN B: HIỂN THỊ GIỎ HÀNG (CART_Display)
    * -------------------------------------------------------------------------- */
@@ -730,7 +721,6 @@ test.describe('6.5.1 Giỏ hàng - 23130340_TranThiMyTram_ASM7', () => {
     manual('Căn chỉnh, không chồng chéo, đúng font và màu chung của website: kiểm tra bằng mắt');
   });
  
-// Nếu file bạn dùng ES module thì: import { test, expect, devices } from '@playwright/test';
   test('CART_Display_06 - Bố cục giỏ hàng hiển thị đúng trên di động', async ({ page, context, browser }) => {
   // Seed giỏ ở trình duyệt desktop, rồi chuyển sang thiết bị di động với cùng cookie
   await seedCart(page, ['C', 'B']);
