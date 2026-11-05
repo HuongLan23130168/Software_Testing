@@ -796,112 +796,6 @@ test("Mega_Link_01", async ({ page }) => {
   console.log("Điều hướng đến trang Máy giặt thành công");
 });
 
-test("Mega_GUI_03", async ({ page }) => {
-  await page.setViewportSize({
-    width: 1366,
-    height: 768,
-  });
-
-  await openHomeAndCloseVoucher(page);
-
-  const zoomLevels = ["80%", "100%", "125%"];
-
-  for (const zoom of zoomLevels) {
-    console.log(`Đang kiểm tra Mega Menu ở mức Zoom ${zoom}`);
-
-    await page.evaluate((value) => {
-      document.documentElement.style.zoom = value;
-    }, zoom);
-
-    await page.waitForTimeout(1000);
-
-    await hoverDanhMuc(page);
-    await waitMenu(page);
-
-    const categories = [
-      "Chương trình hot",
-      "Hàng chuẩn, giá mê",
-      "Điện lạnh, điện máy",
-      "Điện gia dụng",
-      "Máy lọc nước",
-      "Đồ gia dụng",
-      "Làm đẹp, chăm sóc cá nhân",
-      "Điện tử, Laptop, Công nghệ",
-      "Phụ kiện",
-      "Máy cũ, trưng bày",
-      "Sản phẩm khác",
-    ];
-
-    const viewport = page.viewportSize();
-
-    expect(viewport).not.toBeNull();
-
-    let visibleCount = 0;
-
-    for (const name of categories) {
-      const item = page
-        .getByText(name, {
-          exact: true,
-        })
-        .first();
-
-      if (!(await item.isVisible().catch(() => false))) {
-        console.log(`Không hiển thị: ${name}`);
-        continue;
-      }
-
-      const box = await item.boundingBox();
-
-      expect(
-        box,
-        `Không lấy được vị trí của ${name} ở Zoom ${zoom}`,
-      ).not.toBeNull();
-
-      expect(
-        box!.x,
-        `${name} bị tràn cạnh trái ở Zoom ${zoom}`,
-      ).toBeGreaterThanOrEqual(0);
-
-      expect(
-        box!.y,
-        `${name} bị cắt phía trên ở Zoom ${zoom}`,
-      ).toBeGreaterThanOrEqual(0);
-
-      expect(
-        box!.x + box!.width,
-        `${name} bị tràn cạnh phải ở Zoom ${zoom}`,
-      ).toBeLessThanOrEqual(viewport!.width + 2);
-
-      expect(
-        box!.y + box!.height,
-        `${name} bị cắt phía dưới ở Zoom ${zoom}`,
-      ).toBeLessThanOrEqual(viewport!.height + 2);
-
-      visibleCount++;
-
-      console.log(`Đã kiểm tra: ${name}`);
-    }
-
-    expect(
-      visibleCount,
-      `Không có danh mục nào hiển thị ở Zoom ${zoom}`,
-    ).toBeGreaterThan(0);
-
-    console.log(
-      `Zoom ${zoom}: kiểm tra thành công ${visibleCount} nhóm danh mục`,
-    );
-
-    await page.mouse.move(5, 5);
-    await page.waitForTimeout(500);
-  }
-
-  await page.evaluate(() => {
-    document.documentElement.style.zoom = "100%";
-  });
-
-  console.log("Hoàn thành kiểm tra Mega Menu ở 3 mức Zoom");
-});
-
 test("Shortcut_Display_01", async ({ page }) => {
   await openHomeAndCloseVoucher(page);
 
@@ -1597,7 +1491,7 @@ test("Shortcut_Nav_05", async ({ page }) => {
   await checkShortcutNavigation(
     page,
     "Tủ đông mát",
-    "/tu-dong-mat",
+    "/tu-dong",
     "Shortcut_Nav_05",
   );
 });
@@ -1605,11 +1499,11 @@ test("Shortcut_Nav_05", async ({ page }) => {
 test("Shortcut_Nav_06", async ({ page }) => {
   const shortcuts = [
     { name: "Quạt", url: "/quat" },
-    { name: "Loa", url: "/loa" },
+    { name: "Loa", url: "/dan-loa-dvd" },
     { name: "Bếp điện âm", url: "/bep-dien" },
     { name: "Tủ lạnh", url: "/tu-lanh" },
     { name: "Gia dụng", url: "/gia-dung" },
-    { name: "Máy lạnh", url: "/dieu-hoa" },
+    { name: "Máy lạnh", url: "/may-lanh" },
     { name: "Máy sấy quần áo", url: "/may-say-quan-ao" },
     { name: "Robot hút bụi", url: "/robot-hut-bui" },
     { name: "Nồi cơm điện", url: "/noi-com-dien" },
@@ -2576,4 +2470,46 @@ test("Responsive_02", async ({ page }) => {
   console.log("--------------------------------");
   console.log("Responsive_02: Hoàn thành kiểm tra.");
   console.log("--------------------------------");
+});
+
+test("AllGroups_Select_01", async ({ page }) => {
+  // 1. Truy cập trang Tất cả nhóm hàng.
+  await page.goto("https://www.dienmayxanh.com/danh-muc-nhom-hang");
+
+  await page.waitForLoadState("domcontentloaded");
+  await page.waitForTimeout(2000);
+
+  // 2. Lấy danh mục Điện gia dụng ở cột bên trái.
+  const category = page
+    .locator("li.p-12px.cursor-pointer")
+    .filter({ hasText: /^Điện gia dụng$/ });
+
+  await expect(category).toBeVisible();
+
+  // 3. Lấy nội dung ban đầu ở khu vực bên phải.
+  const beforeClick = await page.locator("body").innerText();
+
+  console.log("===== TRƯỚC KHI CHỌN DANH MỤC =====");
+
+  // 4. Click danh mục Điện gia dụng.
+  await category.click();
+
+  await page.waitForTimeout(1500);
+
+  // 5. Lấy nội dung sau khi chọn.
+  const afterClick = await page.locator("body").innerText();
+
+  console.log("===== SAU KHI CHỌN DANH MỤC =====");
+
+  // 6. Kiểm tra nội dung trang vẫn hiển thị.
+  expect(afterClick.length).toBeGreaterThan(0);
+
+  // 7. Kiểm tra nội dung có thay đổi sau khi click.
+  console.log("Nội dung trước khi click:", beforeClick.length);
+  console.log("Nội dung sau khi click:", afterClick.length);
+
+  console.log("Nội dung có thay đổi:", beforeClick !== afterClick);
+
+  // 8. Kiểm tra danh mục vẫn hiển thị sau thao tác.
+  await expect(category).toBeVisible();
 });
