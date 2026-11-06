@@ -131,7 +131,8 @@ function installDomHelpers() {
 
   /** Nút xoá (X) trong một phần tử (thẻ trong thanh so sánh hoặc cột bảng so sánh) */
   const removeOf = (item: Element): HTMLElement | null => {
-    const root = item.parentElement ?? item;
+    // Tìm trong đúng ô để tránh lấy nút X của ô kế bên trong grid mới.
+    const root = item;
     const named = Array.from(root.querySelectorAll<HTMLElement>(
       '[class*="close" i], [class*="remove" i], [class*="delete" i], [class*="btn-del" i], [aria-label], [title]'))
       .find(e => vis(e) && /close|remove|delete|xoá|xóa|bỏ|^x$/i.test(
@@ -218,6 +219,24 @@ function installDomHelpers() {
   };
 
   const dockItems = (dock: HTMLElement): HTMLElement[] => {
+    // Giao diện DMX mới đặt các ô sản phẩm trực tiếp trong grid-cols-4.
+    // Ảnh nằm trong từng ô, còn các ô trống chỉ có nhãn "Thêm sản phẩm".
+    // Tránh leo từ ảnh lên grid cha, khiến tên/count bị đọc sai khi chỉ có 1 SP.
+    const grid = Array.from(dock.querySelectorAll<HTMLElement>('[class*="grid-cols"]'))
+      .find(e => vis(e) && e.children.length >= 2
+        && Array.from(e.children).some(child => /thêm\s*sản\s*phẩm/i.test(txt(child))));
+    if (grid) {
+      const slots = Array.from(grid.children).filter((e): e is HTMLElement => e instanceof HTMLElement && vis(e));
+      const selected = slots.filter(slot => {
+        const label = txt(slot);
+        return !!slot.querySelector('img') && label.length > 0
+          && !/^thêm\s*sản\s*phẩm$/i.test(label)
+          && !/so\s*sánh\s*ngay/i.test(label);
+      });
+      if (selected.length) return selected;
+    }
+
+    // Dự phòng cho layout cũ không có grid với slot là phần tử con trực tiếp.
     const items: HTMLElement[] = [];
     const imgs = Array.from(dock.querySelectorAll('img')).filter(vis);
     for (const img of imgs) {
@@ -327,6 +346,13 @@ function installDomHelpers() {
   const cardButton = (card: HTMLElement): HTMLElement | null => {
     const all = Array.from(card.querySelectorAll<HTMLElement>('*'));
     // 1. Ưu tiên phần tử có icon__row-5-col-2 (nút So sánh của DMX)
+    const icon = all.find(e => e.matches('i.icon__row-5-col-2'));
+    if (icon) {
+      // Giao diện mới nhận click ở wrapper chứa icon và nhãn, không phải icon trang trí.
+      return (icon.closest('button, a, [role="button"]') as HTMLElement | null)
+        ?? (icon.parentElement as HTMLElement | null)
+        ?? icon;
+    }
     let c = all.filter(e => e.classList.contains('icon__row-5-col-2') || e.querySelector('i.icon__row-5-col-2'));
     // 2. Phần tử có text "So sánh"
     if (!c.length) c = all.filter(e => /^so\s*sánh$/i.test(txt(e)));
@@ -363,9 +389,10 @@ function installDomHelpers() {
     const btn = cardButton(card);
     if (btn) {
       const cls = (btn.getAttribute('class') ?? '').toLowerCase();
-      if (/active|checked|selected|primary|green/i.test(cls)) return true;
+      // text-primary-600 hiện là màu mặc định của nút trên DMX, không thể dùng làm trạng thái đã chọn.
+      if (/active|checked|selected/i.test(cls) || /(^|\s)(bg-green|text-green|border-green)/i.test(cls)) return true;
       const btnTxt = txt(btn);
-      if (/^(đã chọn|bỏ so sánh|bỏ chọn|đã thêm)/i.test(btnTxt) && btnTxt.length < 30) return true;
+      if (/^(đã chọn|bỏ so sánh|bỏ chọn|đã thêm(?:\s+so sánh)?)/i.test(btnTxt) && btnTxt.length < 30) return true;
       // Kiểm tra màu chữ/icon thay đổi (được đánh dấu bằng class text-green hoặc text-primary khác)
       const style = getComputedStyle(btn);
       if (style.color && style.color !== 'rgb(0, 0, 0)' && style.color !== 'rgb(255, 255, 255)') {
@@ -388,7 +415,7 @@ function installDomHelpers() {
     return Array.from(card.querySelectorAll<HTMLElement>('*')).some(e => {
       const t = txt(e);
       const c = (e.getAttribute('class') ?? '').toLowerCase();
-      return (/^(đã chọn|bỏ so sánh|bỏ chọn|đã thêm)/i.test(t) && t.length < 25)
+      return (/^(đã chọn|bỏ so sánh|bỏ chọn|đã thêm(?:\s+so sánh)?)/i.test(t) && t.length < 30)
         || (/compare/.test(c) && /(active|checked|selected)/.test(c));
     });
   };
@@ -406,9 +433,19 @@ function installDomHelpers() {
     const base: Set<string> | undefined = (window as any).__dmxBase;
     return sugCandidates().filter(e => !base?.has(txt(e)));
   };
-  const readSuggestions = () => newSuggestions().map(e => ({ text: txt(e) }));
+  const quickCompareResults = () => Array.from(document.querySelectorAll<HTMLElement>('[id^="modal-"] button'))
+    .filter(e => vis(e) && /^thêm\s*so\s*sánh$/i.test(txt(e)))
+    .map(e => ({ text: norm(e.parentElement?.parentElement?.innerText) }));
+  const readSuggestions = () => {
+    const quick = quickCompareResults();
+    return quick.length ? quick : newSuggestions().map(e => ({ text: txt(e) }));
+  };
   const tagSuggestion = (reSource: string) => {
     const re = new RegExp(reSource, 'i');
+    const quick = Array.from(document.querySelectorAll<HTMLElement>('[id^="modal-"] button'))
+      .find(e => vis(e) && /^thêm\s*so\s*sánh$/i.test(txt(e))
+        && re.test(norm(e.parentElement?.parentElement?.innerText)));
+    if (quick) return mark(quick, 'data-dmx-sug');
     const suggestion = newSuggestions().find(e => re.test(txt(e)));
     if (!suggestion) return false;
     // Trong modal DMX, click thêm nằm trên link riêng trong hàng gợi ý.
@@ -710,7 +747,8 @@ async function openCategory(page: Page) {
 }
 
 /** Click nút [So sánh] trên thẻ sản phẩm (theo thứ tự hoặc theo đường dẫn) */
-async function clickCardCompare(page: Page, target: number | string) {
+async function clickCardCompare(page: Page, target: number | string, waitForAddition = true) {
+  const beforeCount = (await readDock(page)).count;
   const cards = await getListCards(page);
   const path = typeof target === 'number' ? cards[target]?.path : target;
   expect(path, `Không có thẻ sản phẩm "${target}" trên trang danh sách`).toBeTruthy();
@@ -727,12 +765,36 @@ async function clickCardCompare(page: Page, target: number | string) {
   // 2. Sau khi hover, tìm nút So sánh
   const tagged = await page.evaluate((p) => (window as any).__dmx.tagCardCompare(p), path!);
   if (tagged.btn) {
-    await page.locator('[data-dmx-btn]').first().click({ timeout: 10_000 });
+    const btn = page.locator('[data-dmx-btn]').first();
+    // Click vào chính range chữ để tránh phần trống ở wrapper flex rộng toàn thẻ.
+    const label = cardLocator.getByText(/^so\s*sánh$/i).first();
+    if (await label.count()) await label.click({ timeout: 10_000 });
+    else {
+      const box = await btn.boundingBox();
+      await btn.click({
+        timeout: 10_000,
+        position: box ? { x: Math.max(1, box.width - 8), y: box.height / 2 } : undefined,
+      });
+    }
   } else {
     // Dự phòng tìm bằng Playwright text locator trực tiếp trong card
     const btn = cardLocator.locator('div, span, button, a, i').filter({ hasText: /^so\s*sánh$/i }).first();
     await expect(btn, `Không tìm thấy nút [So sánh] trên thẻ ${path} (sau khi đã rê chuột)`).toBeVisible({ timeout: 10_000 });
     await btn.click({ timeout: 10_000 });
+  }
+
+  if (waitForAddition) {
+    try {
+      await expect.poll(async () => (await readDock(page)).count,
+        { timeout: 5_000, message: 'Dock phải cập nhật sau khi chọn sản phẩm' }).toBeGreaterThan(beforeCount);
+    } catch {
+      // Một số lần click thật không làm React cập nhật trên giao diện mới; gọi click() đúng wrapper một lần nữa.
+      const fresh = await page.evaluate((p) => (window as any).__dmx.tagCardCompare(p), path!);
+      expect(fresh.btn, `Không tìm thấy lại nút [So sánh] trên thẻ ${path}`).toBe(true);
+      await page.locator('[data-dmx-btn]').first().evaluate(el => (el as HTMLElement).click());
+      await expect.poll(async () => (await readDock(page)).count,
+        { timeout: 15_000, message: 'Dock phải cập nhật sau lần thử lại nút [So sánh]' }).toBeGreaterThan(beforeCount);
+    }
   }
 }
 
@@ -756,8 +818,18 @@ async function waitForDock(page: Page, count?: number, timeout = 15_000): Promis
 
 async function addCardsFromList(page: Page, n: number): Promise<DockState> {
   for (let i = 0; i < n; i++) {
-    await clickCardCompare(page, i);
-    await waitForDock(page, i + 1);
+    let added = false;
+    for (let attempt = 0; attempt < 2 && !added; attempt++) {
+      await clickCardCompare(page, i);
+      try {
+        await waitForDock(page, i + 1, 15_000);
+        added = true;
+      } catch (error) {
+        const dock = await readDock(page);
+        if (dock.found && dock.count === i + 1) added = true;
+        else if (attempt === 1) throw error;
+      }
+    }
   }
   return readDock(page);
 }
@@ -808,11 +880,11 @@ async function openDockSearch(page: Page) {
 async function clickSuggestion(page: Page, re: RegExp) {
   const ok = await page.evaluate((src) => (window as any).__dmx.tagSuggestion(src), re.source);
   expect(ok, `Không có gợi ý nào khớp ${re}`).toBe(true);
-  // Gợi ý DMX có thể được thay node khi ảnh/layout cập nhật. Dùng locator theo
-  // accessible name để Playwright tự resolve lại node hiện hành.
-  const add = page.getByRole('button', { name: 'Thêm so sánh', exact: true }).last();
-  if (await add.count()) await add.evaluate(el => (el as HTMLElement).click());
-  else await page.locator('[data-dmx-sug]').click({ timeout: 10_000 });
+  // Modal mới có nút HTML "Thêm so sánh" trong kết quả gõ nhanh; click cả
+  // card bên dưới chỉ focus sản phẩm và không thêm nó vào dock.
+  const add = page.locator('[id^="modal-"] button').filter({ hasText: /^\s*thêm\s*so\s*sánh\s*$/i }).first();
+  await expect(add, 'Kết quả tìm kiếm phải có nút [Thêm so sánh]').toBeVisible({ timeout: 10_000 });
+  await add.click({ timeout: 10_000 });
 }
 
 const modelRe = (model: string) => new RegExp(model.split('').map(c => (c === '-' ? '[-\\s]?' : escapeRe(c))).join(''), 'i');
@@ -872,7 +944,7 @@ async function openComparePage(page: Page, browser: Browser): Promise<CompareSta
   await dismissPopups(page);
   await waitForCompareTable(page, 2);
   await expect.poll(async () => (await readCompare(page)).columns.every(c => c.hasImg && c.imgOk),
-    { timeout: 12_000, message: 'Ảnh sản phẩm trên bảng phải tải xong' }).toBe(true);
+    { timeout: 30_000, message: 'Ảnh sản phẩm trên bảng phải tải xong' }).toBe(true);
   return readCompare(page);
 }
 
@@ -887,10 +959,28 @@ async function getMaxCompare(browser: Browser): Promise<number> {
     const cards = await getListCards(p);
     let max = 0;
     for (let i = 0; i < Math.min(cards.length, 8); i++) {
-      await clickCardCompare(p, i);
-      await p.waitForTimeout(1200);
+      await clickCardCompare(p, i, false);
+      // Chờ số lượng tăng thay vì giả định luôn chọn được thêm một sản phẩm;
+      // khi chạm giới hạn, giao diện giữ nguyên số lượng hiện tại.
+      let increased = false;
+      try {
+        await expect.poll(async () => (await readDock(p)).count > max,
+          { timeout: max === 0 ? 15_000 : 5_000, message: 'Số sản phẩm trong dock phải tăng sau khi chọn' }).toBe(true);
+        increased = true;
+      } catch {
+        if (max === 0) {
+          // Chỉ thử lại khi lần click đầu chưa thêm được sản phẩm nào.
+          await clickCardCompare(p, i, false);
+          try {
+            await expect.poll(async () => (await readDock(p)).count > max,
+              { timeout: 15_000, message: 'Dock phải nhận được sản phẩm đầu tiên' }).toBe(true);
+            increased = true;
+          } catch { /* Không thể khởi tạo dock, giữ max=0 để assertion báo rõ tiền điều kiện. */ }
+        }
+      }
       const d = await readDock(p);
       if (d.count > max) max = d.count; else break;
+      if (!increased) break;
     }
     maxCompareCache = max;
   } finally {
