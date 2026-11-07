@@ -1,20 +1,5 @@
 import { test, expect, Page, Locator, Response } from '@playwright/test';
 
-/**
- * ASM7 - Automation cho chức năng "Danh sách sản phẩm theo danh mục" (6.3.2)
- * Website thật: https://www.dienmayxanh.com/tivi   |   Công cụ: Playwright + TypeScript
- * 27 test case: ProductList_Access_01 ... ProductList_LoadMore_07
- *
- * Chạy kiểm thử:
- *   npx playwright test tests/23130328_PhanThaoTien_ASM7.spec.ts --headed --workers=1
- *
- * Biến môi trường tuỳ chọn:
- *   SLOWMO=300        làm chậm thao tác để quay video demo
- *   PW_CHANNEL=chrome dùng Google Chrome cài trên máy thay cho Chromium mặc định
- *   PW_VIDEO=on       bật quay video toàn bộ (mặc định chỉ giữ video khi fail: retain-on-failure)
- *   DMX_BASE_URL=...  đổi địa chỉ website (mặc định https://www.dienmayxanh.com)
- */
-
 const BASE_URL = (process.env.DMX_BASE_URL ?? 'https://www.dienmayxanh.com').replace(/\/$/, '');
 const CATEGORY_URL = `${BASE_URL}/tivi`;
 

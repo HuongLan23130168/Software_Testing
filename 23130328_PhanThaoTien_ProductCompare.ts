@@ -1,36 +1,9 @@
 import { test, expect, Browser, Page, Response } from '@playwright/test';
 
-/**
- * Automation cho chức năng "So sánh sản phẩm" (6.4.2) - Điện Máy Xanh
- * Công cụ: Playwright + TypeScript
- * 23 test case: ProductCompare_Add_01 ... ProductCompare_Navigate_01
- * (khớp file DMX_3_SoSanhSanPham_TestCase_v3.xlsx, mỗi `test` ứng với đúng 1 ID)
- *
- * Chạy:
- *   npx playwright test tests/23130328_PhanThaoTien_ProductCompare.spec.ts --headed --workers=1
- *
- * Biến môi trường tuỳ chọn:
- *   SLOWMO=300            làm chậm thao tác để quay video demo
- *   PW_CHANNEL=chrome     dùng Google Chrome thay cho Chromium
- *   PW_VIDEO=on           quay video toàn bộ (mặc định chỉ giữ khi fail)
- *   DMX_BASE_URL=...      đổi địa chỉ website
- *   DMX_PRODUCT_URL=...   đổi sản phẩm mẫu (mặc định Google Tivi TCL 55P635)
- *   DMX_COMPARE_URL=...   URL trang so sánh 2 SP (TCL + Samsung); bỏ trống thì tự dựng bằng giao diện
- *   DMX_MAX_COMPARE=3     số SP so sánh tối đa X; bỏ trống thì tự dò (xem Add_07)
- *
- * NGUYÊN TẮC VIẾT LẠI
- *  - Mỗi bước/kết quả mong đợi trong Excel là một `expect` thật, không còn kiểu "nếu thấy nút thì mới kiểm".
- *  - Hành vi chưa chốt (cột Note trong Excel: "cần đối chiếu") được viết thành các nhánh hợp lệ rõ ràng
- *    theo đúng cách mô tả ở cột Expected Output (ví dụ: "bị vô hiệu hoá HOẶC không hiển thị").
- *  - Số SP tối đa X được dò ở Add_07 và dùng lại cho Add_10, Remove_02, Compare_02 (X < 3 thì Skipped).
- *  - Mỗi test chạy trong context mới nên danh sách so sánh (lưu trình duyệt) luôn bắt đầu từ trống.
- *  - Mọi selector phụ thuộc DOM nằm trong `installDomHelpers()` để chỉnh ở một chỗ khi giao diện đổi.
- */
 
 const BASE_URL = (process.env.DMX_BASE_URL ?? 'https://www.dienmayxanh.com').replace(/\/$/, '');
 const CATEGORY_URL = `${BASE_URL}/tivi`;
 const TCL_URL = process.env.DMX_PRODUCT_URL ?? `${BASE_URL}/tivi/google-tcl-4k-55-inch-55p635`;
-
 // Sản phẩm mẫu theo tài liệu TestCase v3
 const TCL = { model: '55P635', search: '55P635' };
 const SAMSUNG = { model: 'QA65Q8F5', search: 'QA65Q8F5' };

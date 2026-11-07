@@ -1,26 +1,5 @@
 import { test, expect, Page, Response } from '@playwright/test';
 
-/**
- * Automation cho chức năng "Trang chi tiết sản phẩm" (6.4.1)
- * Website thật: https://www.dienmayxanh.com/tivi   |   Công cụ: Playwright + TypeScript
- * 27 test case: ProductDetail_Access_01 ... ProductDetail_Specs_04
- * (khớp file DMX_2_TrangChiTietSanPham_TestCase_v4.xlsx)
- *
- * Chạy kiểm thử:
- *   npx playwright test tests/23130328_PhanThaoTien_ProductDetail.spec.ts --headed --workers=1
- *
- * Biến môi trường tuỳ chọn:
- *   SLOWMO=300          làm chậm thao tác để quay video demo
- *   PW_CHANNEL=chrome   dùng Google Chrome cài trên máy thay cho Chromium mặc định
- *   PW_VIDEO=on         bật quay video toàn bộ (mặc định chỉ giữ video khi fail)
- *   DMX_BASE_URL=...    đổi địa chỉ website (mặc định https://www.dienmayxanh.com)
- *   DMX_PRODUCT_URL=... đổi sản phẩm mẫu (mặc định Google Tivi TCL 55P635)
- *
- * Lưu ý: các test case phụ thuộc dữ liệu thật (không có khuyến mãi, không có giảm giá,
- * không có nút "Xem thêm N khuyến mãi"...) sẽ tự bỏ qua (skip) kèm lý do nếu không tìm thấy dữ liệu phù hợp,
- * giống ghi chú "Blocked/Skipped" trong file test case.
- */
-
 const BASE_URL = (process.env.DMX_BASE_URL ?? 'https://www.dienmayxanh.com').replace(/\/$/, '');
 const CATEGORY_URL = `${BASE_URL}/tivi`;
 let sampleUrl = process.env.DMX_PRODUCT_URL ?? `${BASE_URL}/tivi/google-tcl-4k-55-inch-55p635`;
