@@ -25,8 +25,8 @@ const flexRe = (s: string) =>
 
 const STORAGE_STATE_PATH = path.join(__dirname, '../auth/dmx_storageState.json');
 const HAS_AUTH = fs.existsSync(STORAGE_STATE_PATH);
-const TEST_PHONE = '0978173770';
-const TEST_NAME = 'Minh'; // điền đúng tên như trên web
+const TEST_PHONE = '0907788360';
+const TEST_NAME = 'Vân'; // điền đúng tên như trên web
 
 test.use(HAS_AUTH ? { storageState: STORAGE_STATE_PATH } : {});
 
@@ -169,7 +169,7 @@ test.describe('PHẦN 1: ĐIỀU HƯỚNG VÀ TRUY CẬP (ACCESS)', () => {
     // Thì khi nhập vào số điện thoại thì không cần nhập mã OTP để xác thực
     const phoneInput = testPage.locator('input[type="tel"], input[name="phone"]').first();
     await expect(phoneInput).toBeVisible({ timeout: 15000 });
-    await phoneInput.fill('0978173770');
+    await phoneInput.fill('0907788360');
     await testPage.waitForTimeout(1000);
 
     // Bước 4: Nhấn nút xác nhận (TIẾP TỤC)
