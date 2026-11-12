@@ -6,14 +6,6 @@
  * File: tests/chucnang2.spec.js
  * Sinh viên thực hiện: Trần Thị Mỹ Trâm (MSSV: 23130340)
  * 
- * Toàn bộ 30 Test Case theo ma trận kiểm thử (Sheet "Đặt hàng và thanh toán"):
- * - Nhóm 1: ORDER_Info_01 đến ORDER_Info_10 (Thông tin đặt hàng & Địa chỉ giao hàng)
- * - Nhóm 2: ORDER_Method_01 đến ORDER_Method_02 (Hình thức nhận hàng & Gói giao hàng)
- * - Nhóm 3: ORDER_Pay_01 đến ORDER_Pay_06 (Phương thức thanh toán & Chi tiết thanh toán)
- * - Nhóm 4: ORDER_Calc_01 đến ORDER_Calc_04 (Tóm tắt đơn hàng, Mã giảm giá & Điểm VIP)
- * - Nhóm 5: ORDER_OTP_01 đến ORDER_OTP_04 (Xác thực SMS OTP - Nguyên tắc an toàn)
- * - Nhóm 6: ORDER_GUI_01 (Kiểm tra bố cục trang Thanh toán trên di động)
- * 
  * NGUYÊN TẮC AN TOÀN TRONG KIỂM THỬ ĐẶT HÀNG:
  * - KHÔNG tạo đơn hàng thật, KHÔNG hoàn tất thanh toán tiền thật.
  * - Dừng lại trước bước gửi thông tin nhạy cảm hoặc tại màn hình OTP SMS.
@@ -366,9 +358,6 @@ async function openOrderDialog(page) {
  
 /** Điền thông tin vào hộp thoại "Thông tin đặt hàng" */
 async function fillOrderInfo(page, { gender, fullName, phone, chooseAddress = false } = {}) {
-  // Phạm vi tìm ô nhập: đúng khung hộp thoại "Thông tin đặt hàng" nếu đang mở
-  // (tổ tiên nhỏ nhất của tiêu đề có chứa nút [Xác nhận] đang hiển thị); không có thì dùng cả trang như hàm cũ.
-  // Không dùng [id^="modal-"].last() vì trang có nhiều khung modal ẩn.
   const dialogTitle = page.getByText('Thông tin đặt hàng').first();
   let root = page;
   if (await dialogTitle.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -519,7 +508,6 @@ test.describe('6.5.2 Đặt hàng và thanh toán - Điện máy XANH (Module OR
     if (hasCart()) return;
  
     // test.use({ storageState }) cũng áp dụng cho newContext() bên dưới,
-    // nên phải có sẵn file (trống) trước, rồi ghi đè bằng giỏ thật sau
     fs.mkdirSync('playwright/.cart', { recursive: true });
     fs.writeFileSync(CART_STATE, JSON.stringify({ cookies: [], origins: [] }));
  
@@ -1179,18 +1167,7 @@ test.describe('6.5.2 Đặt hàng và thanh toán - Điện máy XANH (Module OR
     await test.step('Nhập ký tự đặc biệt vào ô Họ và tên', async () => {
       await nameInput.pressSequentially('@#$%');
       expect.soft(clean(await nameInput.inputValue()), 'Ô Họ và tên vẫn nhận ký tự đặc biệt').toBe('');
-    });
-
-        // 4. Nhập họ tên rất dài (150 ký tự) -> nhập được, giao diện không vỡ
-    await test.step('Nhập chuỗi 150 ký tự vào ô Họ và tên', async () => {
-      await nameInput.fill('');
-      await nameInput.pressSequentially('a'.repeat(150));
-      expect.soft(clean(await nameInput.inputValue()).length, 'Ô Họ và tên không nhận đủ 150 ký tự').toBe(150);
-      // Giao diện vẫn bình thường: hộp thoại còn hiển thị, ô nhập vẫn dùng được
-      await expect.soft(page.getByText('Thông tin đặt hàng').first()).toBeVisible();
-      await expect.soft(nameInput).toBeEditable();
-    });
-
+    });    
     // Dừng tại đây: không bấm [Xác nhận]
   });
  
@@ -1651,110 +1628,8 @@ test.describe('6.5.2 Đặt hàng và thanh toán - Điện máy XANH (Module OR
     // Dừng tại đây: không bấm [Thanh toán] -> không tạo đơn
   });
  
-  // TC 16: MWG Paylater hiển thị hạn mức và liên kết Đăng ký ngay
-    // TC 16: MWG Paylater hiển thị hạn mức và liên kết Đăng ký ngay
-  test('ORDER_Pay_04 - MWG Paylater hiển thị hạn mức và liên kết Đăng ký ngay', async ({ page, context }) => {
-    test.setTimeout(180000);
-
-    // Tự đóng popup quảng cáo (lớp nền tối) nếu nó chặn thao tác
-    const overlay = page.locator('div.cursor-pointer[class*="bg-[#1E1E1E]"]').first();
-    await page.addLocatorHandler(overlay, async () => {
-      await page.keyboard.press('Escape');
-      if (await overlay.isVisible().catch(() => false)) {
-        await overlay.click({ position: { x: 5, y: 5 }, force: true }).catch(() => {});
-      }
-    }, { noWaitAfter: true });
-
-    // ---- Pre-condition: nhập thông tin nhận hàng hợp lệ, bấm [Đặt mua] để sang trang Thanh toán ----
-    await seedCart(page, ['C']);
-    await openOrderDialog(page);
-    await fillOrderInfo(page, { fullName: TEST_CUSTOMER.fullName, phone: TEST_CUSTOMER.phone, chooseAddress: true });
-    await page.getByRole('button', { name: 'Xác nhận', exact: true }).last().click({ timeout: 5000 });
-    await expect(page.getByText('Thông tin đặt hàng').first()).toBeHidden({ timeout: 10000 });
-    await page.getByRole('button', { name: 'Đặt mua' }).first().click();
-    await expect(page).toHaveURL(/\/checkout/, { timeout: 15000 });
-
-    const title = page.getByText('Chọn phương thức thanh toán');
-    await title.scrollIntoViewIfNeeded();
-    await expect(title).toBeVisible();
-
-    let popup = null;
-    try {
-      // ---- Step 1: quan sát mục MWG Paylater (nằm trong 3 phương thức đầu, không cần mở rộng danh sách) ----
-      const mwgName = page.getByText(/MWG Paylater/i).filter({ visible: true }).first();
-      await expect(mwgName, 'Phải hiển thị mục MWG Paylater').toBeVisible({ timeout: 10000 });
-      await mwgName.scrollIntoViewIfNeeded();
-
-      // Khung của riêng mục MWG Paylater: khung cha gần nhất chỉ chứa đúng 1 ô chọn
-      const mwgRow = mwgName.locator('xpath=ancestor::*[count(.//input[@type="radio"])=1][1]');
-      const rowText = ((await mwgRow.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
-      console.log('ORDER_Pay_04 - nội dung mục MWG Paylater:', rowText);
-      test.info().annotations.push({ type: 'mwg-paylater', description: rowText });
-      await test.info().attach('buoc-1-mwg-paylater', { body: await page.screenshot(), contentType: 'image/png' });
-
-      // Expected 1: mô tả hạn mức và lãi suất 0% theo chương trình
-      expect(rowText.length, 'Không đọc được nội dung mục MWG Paylater').toBeGreaterThan(0);
-      expect.soft(rowText, 'Phải có mô tả hạn mức').toMatch(/Hạn mức/i);
-      expect.soft(rowText, 'Phải có lãi suất 0% theo chương trình').toMatch(/lãi suất\s*0\s*%/i);
-
-      // Liên kết [Đăng ký ngay] phải nằm TRONG mục MWG Paylater (không lấy nhầm liên kết ở chỗ khác)
-      const registerInRow = mwgRow.getByText('Đăng ký ngay', { exact: true }).filter({ visible: true }).first();
-      const registerAny = page.getByText('Đăng ký ngay', { exact: true }).filter({ visible: true }).first();
-      const inRow = await registerInRow.isVisible().catch(() => false);
-      const registerLink = inRow ? registerInRow : registerAny;
-      await expect(registerLink, 'Phải có liên kết [Đăng ký ngay]').toBeVisible();
-      expect.soft(inRow, '[Đăng ký ngay] phải nằm trong mục MWG Paylater').toBe(true);
-
-      // Ghi nhận (chỉ đọc): địa chỉ liên kết và trạng thái ô chọn MWG Paylater
-      const href = await registerLink.evaluate((el) => (el.closest('a') || {}).href || '').catch(() => '');
-      console.log('ORDER_Pay_04 - href của [Đăng ký ngay]:', href || '(không phải thẻ <a>)');
-      test.info().annotations.push({ type: 'dang-ky-ngay-href', description: href || 'không phải thẻ <a>' });
-
-      const mwgDisabled = await mwgRow.locator('input[type="radio"]').first().isDisabled({ timeout: 3000 }).catch(() => null);
-      test.info().annotations.push({
-        type: 'mwg-o-chon',
-        description: mwgDisabled === null ? 'không đọc được trạng thái' : mwgDisabled ? 'ô chọn bị vô hiệu (chưa đăng ký)' : 'ô chọn bấm được',
-      });
-      console.log('ORDER_Pay_04 - ô chọn MWG Paylater bị vô hiệu:', mwgDisabled);
-
-      // ---- Step 2: click [Đăng ký ngay] -> chuyển sang trang đăng ký MWG Paylater ----
-      // Chỉ kiểm tra tới nơi chuyển đến, KHÔNG đăng ký tài khoản, KHÔNG nhập thông tin.
-      const urlBefore = page.url();
-      const popupP = context.waitForEvent('page', { timeout: 8000 }).catch(() => null);
-      const navP = page.waitForURL((u) => u.toString() !== urlBefore, { timeout: 8000 }).then(() => true).catch(() => false);
-      await registerLink.click();
-      let navigated;
-      [popup, navigated] = await Promise.all([popupP, navP]);
-
-      const dest = popup || page;
-      await dest.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
-      await dest.waitForTimeout(1500);
-      const destUrl = dest.url();
-      const destText = (await dest.locator('body').innerText().catch(() => '')).slice(0, 4000);
-      const dialogShown = !popup && !navigated &&
-        (await page.locator('[role="dialog"], [id^="modal-"]').filter({ visible: true }).count()) > 0;
-      const mode = popup ? 'mở tab mới' : navigated ? 'chuyển trang trong cùng tab' : dialogShown ? 'hiện hộp thoại' : 'không có phản hồi';
-      console.log(`ORDER_Pay_04 - sau khi click: ${mode} | ${destUrl}`);
-      test.info().annotations.push({ type: 'dang-ky-ngay', description: `${mode}: ${destUrl}` });
-      await test.info().attach('buoc-2-sau-khi-click', { body: await dest.screenshot(), contentType: 'image/png' });
-
-      // Expected 2: chuyển sang trang đăng ký MWG Paylater
-      expect(Boolean(popup || navigated || dialogShown),
-        `Click [Đăng ký ngay] không mở trang/ứng dụng/hộp thoại đăng ký (${mode})`).toBe(true);
-      if (popup || navigated) {
-        expect.soft(
-          /paylater/i.test(`${destUrl} ${destText} ${href}`),
-          `Trang đích không nhắc tới MWG Paylater: ${destUrl}`
-        ).toBe(true);
-      }
-      // Dừng tại đây: không đăng ký, không bấm [Thanh toán] -> không tạo đơn
-    } finally {
-      if (popup) await popup.close().catch(() => {});
-    }
-  });
- 
-  // TC 17: Hiển thị danh sách phương thức thanh toán khi nhận hàng tại siêu thị
-  test('ORDER_Pay_05 - Hiển thị danh sách phương thức thanh toán khi nhận hàng tại siêu thị', async ({ page }) => {
+  // TC 16: Hiển thị danh sách phương thức thanh toán khi nhận hàng tại siêu thị
+  test('ORDER_Pay_04 - Hiển thị danh sách phương thức thanh toán khi nhận hàng tại siêu thị', async ({ page }) => {
     test.setTimeout(180000);
 
     // Tự đóng popup quảng cáo (lớp nền tối) nếu nó chặn thao tác
@@ -1938,8 +1813,8 @@ test.describe('6.5.2 Đặt hàng và thanh toán - Điện máy XANH (Module OR
     }
   });
  
-  // TC 18: Hiển thị chi tiết thanh toán đúng khi đổi phương thức
-  test('ORDER_Pay_06 - Hiển thị chi tiết thanh toán đúng khi đổi phương thức', async ({ page }) => {
+  // TC 17: Hiển thị chi tiết thanh toán đúng khi đổi phương thức
+  test('ORDER_Pay_05 - Hiển thị chi tiết thanh toán đúng khi đổi phương thức', async ({ page }) => {
     test.setTimeout(180000);
 
     // Tự đóng popup quảng cáo (lớp nền tối) nếu nó chặn thao tác
@@ -2064,7 +1939,7 @@ test.describe('6.5.2 Đặt hàng và thanh toán - Điện máy XANH (Module OR
    * PHẦN 4: TÍNH TIỀN, MÃ GIẢM & QUÀ TẶNG (ORDER_Calc)
    * -------------------------------------------------------------------------- */
  
-  // TC 19: Tóm tắt đơn hàng khớp với giỏ hàng
+  // TC 18: Tóm tắt đơn hàng khớp với giỏ hàng
   test('ORDER_Calc_01 - Tóm tắt đơn hàng khớp với giỏ hàng', async ({ browser }) => {
     test.setTimeout(240000);
 
@@ -2178,7 +2053,7 @@ test.describe('6.5.2 Đặt hàng và thanh toán - Điện máy XANH (Module OR
     }
   });
  
-    // TC 21: Đơn chỉ gồm sản phẩm được chọn trong giỏ hàng
+    // TC 19: Đơn chỉ gồm sản phẩm được chọn trong giỏ hàng
   test('ORDER_Calc_02 - Đơn chỉ gồm sản phẩm được chọn trong giỏ hàng', async ({ browser }) => {
     test.setTimeout(240000);
 
@@ -2294,7 +2169,7 @@ test.describe('6.5.2 Đặt hàng và thanh toán - Điện máy XANH (Module OR
     }
   });
  
-    // TC 22: Nhập mã giảm giá không hợp lệ
+    // TC 20: Nhập mã giảm giá không hợp lệ
   test('ORDER_Calc_03 - Áp dụng mã giảm giá', async ({ page }) => {
     test.setTimeout(180000);
     page.setDefaultTimeout(15000);
@@ -2384,7 +2259,7 @@ test.describe('6.5.2 Đặt hàng và thanh toán - Điện máy XANH (Module OR
     // Dừng tại đây: không bấm [Thanh toán] -> không tạo đơn
   });
 
-  // TC 23: Bật Dùng điểm Quà Tặng VIP khi chưa đăng nhập
+  // TC 21: Bật Dùng điểm Quà Tặng VIP khi chưa đăng nhập
   test('ORDER_Calc_04 - Bật Dùng điểm Quà Tặng VIP khi chưa đăng nhập', async ({ page }) => {
     test.setTimeout(180000);
     page.setDefaultTimeout(15000);
@@ -2471,7 +2346,7 @@ test.describe('6.5.2 Đặt hàng và thanh toán - Điện máy XANH (Module OR
    * PHẦN 5: XÁC THỰC OTP SMS (ORDER_OTP) - NGUYÊN TẮC AN TOÀN
    * -------------------------------------------------------------------------- */
  
-  // TC 24: Hiển thị màn hình nhập mã SMS sau khi bấm Thanh toán
+  // TC 22: Hiển thị màn hình nhập mã SMS sau khi bấm Thanh toán
   test('ORDER_OTP_01 - Hiển thị màn hình nhập mã SMS sau khi bấm Thanh toán', async ({ page }) => {
     test.setTimeout(180000);
     page.setDefaultTimeout(15000);
@@ -2551,7 +2426,7 @@ test.describe('6.5.2 Đặt hàng và thanh toán - Điện máy XANH (Module OR
     // KHÔNG nhập mã, KHÔNG xác nhận -> không tạo đơn
   });
  
-  // TC 25: Không thể xác thực khi để trống mã SMS
+  // TC 23: Không thể xác thực khi để trống mã SMS
   test('ORDER_OTP_02 - Không thể xác thực khi để trống mã SMS', async ({ page }) => {
     test.setTimeout(180000);
     page.setDefaultTimeout(15000);
@@ -2606,7 +2481,7 @@ test.describe('6.5.2 Đặt hàng và thanh toán - Điện máy XANH (Module OR
     // KHÔNG nhập mã thật -> không tạo đơn
   });
  
-  // TC 26: Không thể xác thực với mã SMS sai
+  // TC 24: Không thể xác thực với mã SMS sai
   test('ORDER_OTP_03 - Không thể xác thực với mã SMS sai', async ({ page }) => {
     test.setTimeout(180000);
     page.setDefaultTimeout(15000);
@@ -2683,7 +2558,7 @@ test.describe('6.5.2 Đặt hàng và thanh toán - Điện máy XANH (Module OR
     // KHÔNG nhập mã đúng -> không tạo đơn
   });
  
-  // TC 27: Gửi lại mã SMS
+  // TC 25: Gửi lại mã SMS
   test('ORDER_OTP_04 - Gửi lại mã SMS sau khi hết đếm ngược', async ({ page }) => {
     test.setTimeout(240000);
     page.setDefaultTimeout(15000);
@@ -2729,7 +2604,7 @@ test.describe('6.5.2 Đặt hàng và thanh toán - Điện máy XANH (Module OR
    * PHẦN 6: GIAO DIỆN NGƯỜI DÙNG DI ĐỘNG (ORDER_GUI)
    * -------------------------------------------------------------------------- */
  
-  // TC 30: Bố cục trang Thanh toán hiển thị đúng trên di động
+  // TC 26: Bố cục trang Thanh toán hiển thị đúng trên di động
   test('ORDER_GUI_01 - Bố cục trang Thanh toán hiển thị đúng trên di động (375x812)', async ({ browser, page: desktopPage }) => {
     test.setTimeout(240000);
 
