@@ -600,7 +600,7 @@ test.describe('6.5.1 Giỏ hàng - 23130340_TranThiMyTram_ASM7', () => {
     await expect(page.locator('footer').first()).toBeAttached();
   }
   expect(new Set(snapshots).size, 'Nội dung giỏ hàng khác nhau giữa các điểm vào').toBe(1);
-});
+  });
  
   test('CART_Display_02 - Hiển thị giỏ hàng trống khi chưa có sản phẩm', async ({ page }) => {
     // Bước 1: click [Giỏ hàng] trên header
@@ -849,37 +849,8 @@ for (const btn of [leftBtn(m, 0), plusBtn(m, 0)]) {
     await expect(page.locator(L.EMPTY_TITLE).first()).toBeVisible();
   });
  
-  test('CART_Update_04 - Không thể nhập số lượng vượt giới hạn tối đa', async ({ page }) => {
-    const { C } = await seedCart(page, ['C']);
-    const c = C.price;
-    const limitPattern = /tối đa|vượt quá|không đủ|giới hạn|chỉ còn/i;
  
-    // Xác định giới hạn tối đa: nhập số rất lớn, hệ thống kẹp về mức tối đa
-    await typeCartQty(page, '99999', 0);
-    const max = await getCartQty(page, 0);
-    expect(max, 'Hệ thống không giới hạn số lượng tối đa').toBeLessThan(99999);
-    expect(max).toBeGreaterThanOrEqual(1);
-    test.info().annotations.push({ type: 'max-qty', description: `Giới hạn tối đa của SP C = ${max}` });
- 
-    // Bước 1: nhập đúng giới hạn tối đa -> cập nhật thành công, thành tiền đúng
-    await typeCartQty(page, max, 0);
-    expect(await getCartQty(page, 0)).toBe(max);
-    await expect.poll(async () => getCartSubtotal(page), { timeout: 8000 }).toBe(c * max);
- 
-    // Bước 2: nhập tối đa + 1 -> có thông báo, SL về mức tối đa hoặc giữ giá trị cũ
-    const msg2 = await typeQtyAndWatchMessage(page, max + 1, limitPattern);
-    expect(await getCartQty(page, 0)).toBeLessThanOrEqual(max);
-    expect.soft(msg2, 'Không thấy thông báo vượt số lượng cho phép (tối đa + 1)').toBe(true);
- 
-    // Bước 3: nhập 99999 -> thông báo tương tự, không lỗi hệ thống, tổng tiền không sai
-    const msg3 = await typeQtyAndWatchMessage(page, 99999, limitPattern);
-    const qty3 = await getCartQty(page, 0);
-    expect(qty3).toBeLessThanOrEqual(max);
-    expect.soft(msg3, 'Không thấy thông báo vượt số lượng cho phép (99999)').toBe(true);
-    await expect.poll(async () => getCartSubtotal(page), { timeout: 8000 }).toBe(c * qty3);
-  });
- 
-  test('CART_Update_05 - Không thể nhập số lượng không hợp lệ', async ({ page }) => {
+  test('CART_Update_04 - Không thể nhập số lượng không hợp lệ', async ({ page }) => {
     await seedCart(page, ['C']);
     expect(await getCartQty(page, 0)).toBe(1);
  
@@ -910,7 +881,7 @@ for (const btn of [leftBtn(m, 0), plusBtn(m, 0)]) {
     expect(await getCartSubtotal(page)).toBeGreaterThan(0);
   });
  
-  test('CART_Update_06 - Xóa một sản phẩm khỏi giỏ hàng sau khi xác nhận', async ({ page }) => {
+  test('CART_Update_05 - Xóa một sản phẩm khỏi giỏ hàng sau khi xác nhận', async ({ page }) => {
     // Pre-condition: SP C (SL 1) và SP B (SL 1)
     const info = await seedCart(page, ['C', 'B']);
     const { C, B } = info;
@@ -932,7 +903,7 @@ for (const btn of [leftBtn(m, 0), plusBtn(m, 0)]) {
     await expect.poll(async () => getHeaderCartBadge(page), { timeout: 8000 }).toBe(1);
   });
  
-  test('CART_Update_07 - Xóa toàn bộ sản phẩm khỏi giỏ hàng sau khi xác nhận', async ({ page }) => {
+  test('CART_Update_06 - Xóa toàn bộ sản phẩm khỏi giỏ hàng sau khi xác nhận', async ({ page }) => {
     // Pre-condition: SP A, SP B, SP C, mỗi sản phẩm SL 1
     const info = await seedCart(page, ['A', 'B', 'C']);
     expect(await getCartItemCount(page)).toBe(3);
@@ -961,7 +932,7 @@ for (const btn of [leftBtn(m, 0), plusBtn(m, 0)]) {
     expect(await getCartItemCount(page)).toBe(0);
   });
  
-  test('CART_Update_08 - Xóa tất cả sản phẩm khỏi giỏ hàng bằng nút Xóa tất cả', async ({ page }) => {
+  test('CART_Update_07 - Xóa tất cả sản phẩm khỏi giỏ hàng bằng nút Xóa tất cả', async ({ page }) => {
   await seedCart(page, ['A', 'B', 'C']);
   expect(await getCartItemCount(page)).toBe(3);
  

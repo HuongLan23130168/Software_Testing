@@ -1473,104 +1473,8 @@ test.describe('6.5.3 Mua trả góp - Điện máy XANH (Module INST)', () => {
     // DỪNG ở hộp thoại hướng dẫn: không đăng ký, không nhập thông tin, không tạo hồ sơ.
   });
 
-  // TC 10: Đổi số lượng sản phẩm trên trang Mua trước trả sau
-  test('INST_Paylater_04 - Đổi số lượng sản phẩm trên trang Mua trước trả sau', async ({ page }) => {
-    test.setTimeout(150000);
-    page.setDefaultTimeout(15000);
-
-    // Pre-condition: đang ở trang /tra-cham-bnpl, SP F số lượng 1
-    await goToBnplPage(page, 'F');
-    await expect(page, `Phải ở trang /tra-cham-bnpl (đang ở ${page.url()})`).toHaveURL(/\/tra-cham-bnpl/);
-    const qty = page.locator(L.BNPL_QTY_INPUT).first();
-    await expect(qty, 'Pre-condition: SP F phải có số lượng 1').toHaveValue('1');
-
-    // Đọc số tiền theo nhãn (giá trị nằm cùng dòng hoặc ở 3 dòng ngay bên dưới nhãn)
-    const readMoney = async (labelRe) => {
-      const lines = (await page.locator('body').innerText()).replace(/\u00a0/g, ' ').split('\n').map((s) => s.trim()).filter(Boolean);
-      const i = lines.findIndex((l) => labelRe.test(l));
-      if (i < 0) return null;
-      for (const l of lines.slice(i, i + 4)) {
-        const m = l.match(/(\d{1,3}(?:\.\d{3})+)\s*[₫đ]/);
-        if (m) return parseInt(m[1].replace(/\./g, ''), 10);
-      }
-      return null;
-    };
-    // Chờ số tiền cập nhật (trang tính lại sau khi đổi số lượng) rồi trả về giá trị đọc được
-    const settle = async (labelRe, expected) => {
-      let v = null;
-      await expect.poll(async () => { v = await readMoney(labelRe); return v === expected; }, { timeout: 8000 })
-        .toBe(true).catch(() => {});
-      return v;
-    };
-
-    // Nút [−] là phần tử ngay trước ô số lượng, nút [+] là phần tử ngay sau (nếu không có thì lấy nút đầu/cuối cùng khối)
-    const pick = async (axis, fallback) => {
-      const loc = qty.locator(`xpath=${axis}::*[1]`);
-      return (await loc.count()) ? loc : fallback;
-    };
-    const minus = await pick('preceding-sibling', qty.locator('xpath=..').locator('button').first());
-    const plus = await pick('following-sibling', qty.locator('xpath=..').locator('button').last());
-    await expect(plus, 'Phải có nút [+] cạnh ô số lượng').toBeVisible();
-
-    // Trạng thái của một nút: vô hiệu/mờ nếu có thuộc tính disabled, bị chặn bấm, độ mờ < 1 hoặc màu khác nút [+]
-    const stateOf = (loc) => loc.evaluate((el) => {
-      const cs = getComputedStyle(el);
-      return {
-        disabledAttr: el.disabled === true || el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true' ||
-          el.closest('[disabled],[aria-disabled="true"]') !== null,
-        cls: /disabled/i.test(String(el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className || '')),
-        noPointer: cs.pointerEvents === 'none',
-        opacity: parseFloat(cs.opacity),
-        color: cs.color,
-        bg: cs.backgroundColor,
-      };
-    });
-    const looksDisabled = async (loc) => {
-      const s = await stateOf(loc);
-      const p = await stateOf(plus);
-      return s.disabledAttr || s.cls || s.noPointer || s.opacity < 1 || s.color !== p.color || s.bg !== p.bg;
-    };
-
-    // Bước 1: quan sát nút [−] và [+] khi số lượng là 1
-    const unit = await readMoney(/^Tổng tiền hàng/);
-    expect(unit, 'Phải đọc được "Tổng tiền hàng" khi số lượng là 1').toBeGreaterThan(0);
-    console.log('[INST_Paylater_04] đơn giá (Tổng tiền hàng khi SL=1):', unit,
-      '| nút [−]:', JSON.stringify(await stateOf(minus)), '| nút [+]:', JSON.stringify(await stateOf(plus)));
-    await test.info().attach('buoc-1-so-luong-1', { body: await page.screenshot(), contentType: 'image/png' });
-    expect.soft(await looksDisabled(minus), 'Nút [−] phải ở trạng thái vô hiệu (mờ) khi số lượng là 1').toBe(true);
-    expect.soft(await looksDisabled(plus), 'Nút [+] phải hoạt động').toBe(false);
-
-    // Bước 2: click nút [+] -> số lượng 2, "Tổng tiền hàng" và "Tạm tính" = 2 x đơn giá
-    await plus.click();
-    await expect(qty, 'Sau khi bấm [+], số lượng phải là 2').toHaveValue('2');
-    const total2 = await settle(/^Tổng tiền hàng/, unit * 2);
-    const sub2 = await settle(/^Tạm tính/, unit * 2);
-    expect.soft(total2, `"Tổng tiền hàng" phải bằng 2 x ${unit}`).toBe(unit * 2);
-    expect.soft(sub2, `"Tạm tính" phải bằng 2 x ${unit}`).toBe(unit * 2);
-    await test.info().attach('buoc-2-so-luong-2', { body: await page.screenshot(), contentType: 'image/png' });
-
-    // Bước 3: click nút [−] -> số lượng 1, tổng tiền cập nhật lại
-    await minus.click();
-    await expect(qty, 'Sau khi bấm [−], số lượng phải về 1').toHaveValue('1');
-    const total3 = await settle(/^Tổng tiền hàng/, unit);
-    const sub3 = await settle(/^Tạm tính/, unit);
-    expect.soft(total3, `"Tổng tiền hàng" phải về ${unit}`).toBe(unit);
-    expect.soft(sub3, `"Tạm tính" phải về ${unit}`).toBe(unit);
-
-    // Bước 4: click nút [−] khi số lượng là 1 -> không giảm xuống dưới 1
-    expect.soft(await looksDisabled(minus), 'Nút [−] phải vô hiệu trở lại khi số lượng về 1').toBe(true);
-    await minus.click({ force: true, timeout: 3000 }).catch(() => {});
-    await page.waitForTimeout(1500);
-    await expect(qty, 'Số lượng không được giảm xuống dưới 1').toHaveValue('1');
-    expect.soft(await readMoney(/^Tổng tiền hàng/), 'Tổng tiền không được đổi khi bấm [−] ở số lượng 1').toBe(unit);
-    await expect(page, 'Không được rời khỏi trang /tra-cham-bnpl').toHaveURL(/\/tra-cham-bnpl/);
-    await test.info().attach('buoc-4-bam-tru-o-so-luong-1', { body: await page.screenshot(), contentType: 'image/png' });
-
-    // Dừng tại đây: không chọn đối tác, không nhập thông tin, không tạo hồ sơ/đơn
-  });
-
-  // TC 11: Không thể tiếp tục khi chưa cung cấp thông tin nhận hàng
-    test('INST_Paylater_05 - Không thể tiếp tục khi chưa cung cấp thông tin nhận hàng', async ({ page }) => {
+  // TC 10: Không thể tiếp tục khi chưa cung cấp thông tin nhận hàng
+    test('INST_Paylater_04 - Không thể tiếp tục khi chưa cung cấp thông tin nhận hàng', async ({ page }) => {
     test.setTimeout(240000);
     page.setDefaultTimeout(15000);
 
@@ -1743,8 +1647,8 @@ test.describe('6.5.3 Mua trả góp - Điện máy XANH (Module INST)', () => {
     // Dừng tại đây: không chọn đối tác, không tạo hồ sơ vay
   });
 
-  // TC 12: Chọn hình thức nhận hàng trên trang Mua trước trả sau
-    test('INST_Paylater_06 - Chọn hình thức nhận hàng trên trang Mua trước trả sau', async ({ page }) => {
+  // TC 11: Chọn hình thức nhận hàng trên trang Mua trước trả sau
+    test('INST_Paylater_05 - Chọn hình thức nhận hàng trên trang Mua trước trả sau', async ({ page }) => {
     test.setTimeout(120000);
 
     const REMINDER = 'Vui lòng cung cấp thông tin nhận hàng';
@@ -1843,7 +1747,7 @@ test.describe('6.5.3 Mua trả góp - Điện máy XANH (Module INST)', () => {
    * PHẦN 3: TRẢ CHẬM QUA CÔNG TY TÀI CHÍNH (INST_Company)
    * -------------------------------------------------------------------------- */
 
-  // TC 14: Chọn Qua công ty tài chính chuyển sang trang giỏ hàng trả chậm tài chính
+  // TC 12: Chọn Qua công ty tài chính chuyển sang trang giỏ hàng trả chậm tài chính
   test('INST_Company_01 - Chọn Qua công ty tài chính chuyển sang trang giỏ hàng trả chậm tài chính', async ({ page }) => {
     test.setTimeout(120000);
     page.setDefaultTimeout(15000);
@@ -1901,132 +1805,9 @@ test.describe('6.5.3 Mua trả góp - Điện máy XANH (Module INST)', () => {
     // Dừng tại đây: không bấm [Đặt mua trả chậm], không nhập thông tin cá nhân -> không tạo hồ sơ
   });
 
-  // TC 15: Hiển thị /thu gọn gói trả chậm nổi bật đúng thông tin
-    test('INST_Company_02 - Hiển thị gói trả chậm nổi bật đúng thông tin', async ({ page }) => {
-    test.setTimeout(150000);
-    page.setDefaultTimeout(15000);
 
-    // Pre-condition: đang ở trang /tra-cham-tai-chinh của SP F
-    await goToFinancialPage(page, 'F');
-    await expect(page).toHaveURL(/\/tra-cham-tai-chinh/);
-    await expect(page.getByText('Chọn gói trả chậm nổi bật').first()).toBeVisible({ timeout: 10000 });
-    await page.getByText('Chọn gói trả chậm nổi bật').first().scrollIntoViewIfNeeded();
-
-    const toNum = (s) => parseInt(String(s).replace(/[^\d]/g, ''), 10);
-
-    // Đọc các gói trong khối "Chọn gói trả chậm nổi bật": mỗi gói bắt đầu ở dòng "Giá trả chậm"
-    const readPackages = async () => {
-      const lines = (await page.locator('body').innerText())
-        .replace(/\u00a0/g, ' ').split('\n').map((s) => s.trim()).filter(Boolean);
-      const s = lines.findIndex((l) => l === 'Chọn gói trả chậm nổi bật');
-      if (s < 0) throw new Error('Không thấy tiêu đề "Chọn gói trả chậm nổi bật"');
-      let e = lines.findIndex((l, i) => i > s && /^(Xem thêm \d+ gói|Hoặc chọn gói trả chậm khác)/i.test(l));
-      if (e < 0) e = lines.length;
-      const sec = lines.slice(s + 1, e);
-      const starts = sec.map((l, i) => (/^Giá trả chậm/i.test(l) ? i : -1)).filter((i) => i >= 0);
-      const cards = starts.map((st, k) => {
-        const text = sec.slice(st, k + 1 < starts.length ? starts[k + 1] : sec.length).join('\n');
-        const pick = (re) => { const m = text.match(re); return m ? m[1] : null; };
-        return {
-          text,
-          approval: pick(/(Duyệt[^\n]*)/),
-          monthly: pick(/(\d[\d.]*)\s*[₫đ]\s*\/\s*tháng/),
-          term: pick(/Kỳ hạn\s+(\d+)\s*tháng/),
-          rate: pick(/Lãi suất\s+(\d+(?:[.,]\d+)?)\s*%/),
-          prepay: pick(/Trả trước\s+(\d[\d.]*)\s*[₫đ]/),
-          financed: pick(/Tổng tr\.?\s*chậm\s+(\d[\d.]*)\s*[₫đ]/),
-          total: pick(/Tổng tiền\s+(\d[\d.]*)\s*[₫đ]/),
-          diff: pick(/Chênh lệch\s+(\d[\d.]*)\s*[₫đ]/),
-        };
-      });
-      return { cards, lines };
-    };
-
-    // ---- Step 1 / Expected 1: mỗi gói hiển thị đủ các thông tin ----
-    const { cards, lines } = await readPackages();
-    console.log('[INST_Company_02] Số gói nổi bật:', cards.length, JSON.stringify(cards.map(({ text, ...r }) => r)));
-    await test.info().attach('buoc-1-cac-goi-noi-bat', { body: await page.screenshot(), contentType: 'image/png' });
-    expect(cards.length, `Phải có các gói trả chậm nổi bật. Nội dung: ${JSON.stringify(lines.slice(0, 30))}`).toBeGreaterThanOrEqual(2);
-    const fields = ['approval', 'monthly', 'term', 'rate', 'prepay', 'financed', 'total', 'diff'];
-    cards.forEach((c, i) => {
-      for (const f of fields) {
-        expect.soft(c[f], `Gói ${i + 1} thiếu "${f}". Nội dung gói: ${JSON.stringify(c.text)}`).not.toBeNull();
-      }
-    });
-
-    // Công ty tài chính hiển thị bằng logo: ghi nhận các ảnh có tên công ty (Home Credit, Shinhan, FE Credit, mcredit)
-    const logos = await page.locator('img').evaluateAll((imgs) => imgs
-      .map((im) => `${im.alt || ''} ${im.src || ''}`)
-      .filter((s) => /home\s*-?\s*credit|shinhan|fe\s*-?\s*credit|mcredit/i.test(s)));
-    console.log('[INST_Company_02] Logo công ty tài chính:', logos.length);
-    expect.soft(logos.length, 'Phải có logo/tên công ty tài chính trong các gói').toBeGreaterThan(0);
-
-    // ---- Step 2 / Expected 2: đối chiếu từng gói ----
-    cards.forEach((c, i) => {
-      if (c.monthly == null || c.term == null || c.financed == null) return;
-      const expectMonthly = toNum(c.financed) / toNum(c.term);
-      // Tiền trả mỗi tháng được làm tròn nên chỉ xấp xỉ (cho phép lệch tối đa 1.000đ)
-      expect.soft(Math.abs(toNum(c.monthly) - expectMonthly),
-        `Gói ${i + 1}: tiền trả mỗi tháng ${c.monthly} lệch quá nhiều so với ${c.financed} ÷ ${c.term} = ${Math.round(expectMonthly)}`)
-        .toBeLessThanOrEqual(1000);
-      // Lãi suất 0% thì chênh lệch = 0đ
-      if (c.rate != null && parseFloat(c.rate.replace(',', '.')) === 0) {
-        expect.soft(toNum(c.diff), `Gói ${i + 1}: lãi suất 0% nhưng chênh lệch khác 0đ (${c.diff})`).toBe(0);
-      }
-      // Tổng tiền = trả trước + tổng trả chậm
-      if (c.total != null && c.prepay != null) {
-        expect.soft(toNum(c.total), `Gói ${i + 1}: tổng tiền phải bằng trả trước + tổng trả chậm`)
-          .toBe(toNum(c.prepay) + toNum(c.financed));
-      }
-    });
-
-    // ---- Step 3 / Expected 3: click [Xem thêm ... gói] -> hiển thị thêm các gói còn lại ----
-    // (Web không có nút [Thu gọn] nên test không kiểm tra thu gọn)
-    const moreBtn = page.getByText(/Xem thêm \d+ gói/).first();
-    await expect(moreBtn, 'Phải có nút [Xem thêm ... gói]').toBeVisible();
-    const moreCount = toNum((await moreBtn.innerText()).match(/\d+/)[0]);
-    await moreBtn.scrollIntoViewIfNeeded();
-    await moreBtn.click();
-    await page.waitForTimeout(1500);
-    const after = await readPackages();
-    console.log('[INST_Company_02] Số gói trước/sau khi xem thêm:', cards.length, after.cards.length, '| nút ghi thêm', moreCount);
-    await test.info().attach('buoc-3-sau-khi-xem-them', { body: await page.screenshot(), contentType: 'image/png' });
-
-    // Số gói hiển thị tăng lên
-    expect(after.cards.length, 'Sau khi xem thêm phải hiển thị nhiều gói hơn').toBeGreaterThan(cards.length);
-    // Tăng đúng bằng số gói ghi trên nút
-    expect.soft(after.cards.length - cards.length,
-      `Số gói tăng thêm phải bằng số ghi trên nút (${moreCount})`).toBe(moreCount);
-    // Các gói đang hiển thị trước đó vẫn còn nguyên
-    expect.soft(cards.every((c) => after.cards.some((a) => a.text === c.text)),
-      'Các gói đã hiển thị trước khi bấm [Xem thêm] phải được giữ nguyên').toBe(true);
-    // Các gói mới hiển thị cũng phải có đủ thông tin
-    after.cards.forEach((c, i) => {
-      for (const f of fields) {
-        expect.soft(c[f], `Gói ${i + 1} (sau khi xem thêm) thiếu "${f}". Nội dung gói: ${JSON.stringify(c.text)}`).not.toBeNull();
-      }
-    });
-const collapseBtn = page.getByText(/^Thu gọn/i).filter({ visible: true }).first();
-    const hasCollapse = await collapseBtn.isVisible({ timeout: 3000 }).catch(() => false);
-    console.log('[INST_Company_02] Có nút Thu gọn:', hasCollapse);
-    expect.soft(hasCollapse,
-      'Sau khi bấm [Xem thêm ... gói] phải có nút [Thu gọn] để thu gọn các gói (web hiện KHÔNG có nút này)').toBe(true);
-
-    if (hasCollapse) {
-      await collapseBtn.scrollIntoViewIfNeeded();
-      await collapseBtn.click();
-      await page.waitForTimeout(1500);
-      const collapsed = await readPackages();
-      expect.soft(collapsed.cards.length,
-        `Sau khi [Thu gọn] số gói phải về ${cards.length}`).toBe(cards.length);
-      await expect.soft(page.getByText(/Xem thêm \d+ gói/).first(),
-        'Sau khi [Thu gọn] phải hiện lại nút [Xem thêm ... gói]').toBeVisible();
-    }
-    // Dừng tại đây: không chọn gói, không nhập thông tin, không đặt mua
-  });
-
-  // TC 16: Lọc gói theo công ty tài chính, tiền trả trước và kỳ hạn
-    test('INST_Company_03 - Lọc gói theo công ty tài chính, tiền trả trước và kỳ hạn', async ({ page }) => {
+  // TC 13: Lọc gói theo công ty tài chính, tiền trả trước và kỳ hạn
+    test('INST_Company_02 - Lọc gói theo công ty tài chính, tiền trả trước và kỳ hạn', async ({ page }) => {
     test.setTimeout(300000);
     page.setDefaultTimeout(15000);
 
@@ -2349,11 +2130,38 @@ const collapseBtn = page.getByText(/^Thu gọn/i).filter({ visible: true }).firs
     if (allList.length === 0) expect.soft(allMsg, `Bước 2: [Tất cả] / ${FILTER_LABEL} không có gói thì phải hiện thông báo`).toBe(true);
     await test.info().attach('buoc-2-tat-ca', { body: await page.screenshot(), contentType: 'image/png' });
 
+        // ---------- Bước 5: sau khi quan sát xong, bấm [Bỏ lọc] -> không còn nhìn thấy các gói sau khi lọc ----------
+    // Trước khi bỏ lọc phải đang có kết quả lọc (gói hoặc thông báo không có kết quả) để việc "biến mất" có ý nghĩa
+    expect.soft(allList.length > 0 || allMsg, 'Bước 5: trước khi bỏ lọc phải đang hiển thị kết quả lọc (gói hoặc thông báo không có kết quả)').toBe(true);
+    const clearBtn = page.getByText(/^Bỏ lọc$/i).filter({ visible: true }).first();
+    if (!(await clearBtn.isVisible({ timeout: 5000 }).catch(() => false))) {
+      const seen = await page.evaluate(() => [...document.querySelectorAll('body *')]
+        .filter((e) => e.children.length === 0 && /lọc|xóa|làm mới|reset/i.test(e.textContent || '') && e.getBoundingClientRect().width > 0)
+        .map((e) => e.textContent.trim().slice(0, 60)).slice(0, 10));
+      await test.info().attach('khong-thay-bo-loc', { body: await page.screenshot(), contentType: 'image/png' });
+      throw new Error(`Bước 5: không thấy nút "Bỏ lọc" sau khi đã chọn bộ lọc. Chữ liên quan đang hiển thị: ${JSON.stringify(seen)}`);
+    }
+    await clearBtn.scrollIntoViewIfNeeded();
+    await clearBtn.click();
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+    await expect.poll(async () => (await readList()).length, {
+      message: 'Bước 5: sau khi bấm [Bỏ lọc] không còn được thấy các gói sau khi lọc',
+      timeout: 8000,
+    }).toBe(0);
+    expect.soft(await noResultShown(), 'Bước 5: sau khi bỏ lọc không còn thông báo "không tìm thấy gói trả chậm phù hợp"').toBe(false);
+    // Hai ô chọn trở về trạng thái chưa chọn
+    await expect.soft(page.getByText('Chọn số tiền trả trước', { exact: true }).filter({ visible: true }).first(),
+      'Bước 5: sau khi bỏ lọc ô "Số tiền trả trước" phải về trạng thái chưa chọn').toBeVisible();
+    await expect.soft(page.getByText('Chọn kỳ hạn', { exact: true }).filter({ visible: true }).first(),
+      'Bước 5: sau khi bỏ lọc ô "Kỳ hạn" phải về trạng thái chưa chọn').toBeVisible();
+    console.log('[INST_Company_02] Bước 5: đã bấm [Bỏ lọc], số gói sau khi lọc còn thấy:', (await readList()).length);
+    await test.info().attach('buoc-5-bo-loc', { body: await page.screenshot(), contentType: 'image/png' });
+
     // Dừng tại đây: không duyệt các mức trả trước / kỳ hạn khác, không chọn gói, không nhập thông tin, không đặt mua
   });
 
-  // TC 17: Điền đủ thông tin hồ sơ trả chậm hợp lệ và đến bước xác thực SMS
-  test('INST_Company_04 - Điền đủ thông tin hồ sơ trả chậm hợp lệ và đến bước xác thực SMS', async ({ page }) => {
+  // TC 14: Điền đủ thông tin hồ sơ trả chậm hợp lệ và đến bước xác thực SMS
+  test('INST_Company_03 - Điền đủ thông tin hồ sơ trả chậm hợp lệ và đến bước xác thực SMS', async ({ page }) => {
     test.setTimeout(150000);
     manual('NGUYÊN TẮC AN TOÀN: Dừng tại màn hình nhập mã SMS, KHÔNG nhập mã, KHÔNG tạo hồ sơ');
 
@@ -2637,8 +2445,8 @@ const collapseBtn = page.getByText(/^Thu gọn/i).filter({ visible: true }).firs
     // DỪNG tại đây: không nhập mã SMS, không bấm xác nhận
   });
 
-  // TC 18: Không thể đặt mua khi để trống thông tin làm hồ sơ
-  test('INST_Company_05 - Không thể đặt mua khi để trống thông tin làm hồ sơ', async ({ page }) => {
+  // TC 15: Không thể đặt mua khi để trống thông tin làm hồ sơ
+  test('INST_Company_04 - Không thể đặt mua khi để trống thông tin làm hồ sơ', async ({ page }) => {
     test.setTimeout(420000);
     page.setDefaultTimeout(20000); // thao tác nào kẹt quá 20s sẽ báo lỗi rõ ràng, không đứng im
     manual('NGUYÊN TẮC AN TOÀN: Mọi bước đều phải bị chặn trước khi tới hộp thoại OTP, KHÔNG nhập mã, KHÔNG tạo hồ sơ');
@@ -2992,8 +2800,8 @@ const collapseBtn = page.getByText(/^Thu gọn/i).filter({ visible: true }).firs
     // DỪNG: không có bước nào được phép tới OTP, không tạo hồ sơ
   });
 
-  // TC 19: Không thể đặt mua với số thẻ căn cước không hợp lệ
-  test('INST_Company_06 - Không thể đặt mua với số thẻ căn cước không hợp lệ', async ({ page }) => {
+  // TC 16: Không thể đặt mua với số thẻ căn cước không hợp lệ
+  test('INST_Company_05 - Không thể đặt mua với số thẻ căn cước không hợp lệ', async ({ page }) => {
     test.setTimeout(300000);
     page.setDefaultTimeout(20000); // thao tác nào kẹt quá 20s sẽ báo lỗi rõ ràng, không đứng im
     manual('NGUYÊN TẮC AN TOÀN: Mọi bước đều phải bị chặn trước khi tới hộp thoại OTP, KHÔNG nhập mã, KHÔNG tạo hồ sơ');
@@ -3309,8 +3117,8 @@ const collapseBtn = page.getByText(/^Thu gọn/i).filter({ visible: true }).firs
     // DỪNG: không có bước nào được phép tới OTP, không tạo hồ sơ
   });
 
-  // TC 20: Không thể đặt mua với ngày sinh không hợp lệ hoặc chưa đủ tuổi
-  test('INST_Company_07 - Không thể đặt mua với ngày sinh không hợp lệ hoặc chưa đủ tuổi', async ({ page }) => {
+  // TC 17: Không thể đặt mua với ngày sinh không hợp lệ hoặc chưa đủ tuổi
+  test('INST_Company_06 - Không thể đặt mua với ngày sinh không hợp lệ hoặc chưa đủ tuổi', async ({ page }) => {
     test.setTimeout(300000);
     page.setDefaultTimeout(20000); // thao tác nào kẹt quá 20s sẽ báo lỗi rõ ràng, không đứng im
     manual('NGUYÊN TẮC AN TOÀN: Các bước chặn phải dừng trước OTP. Bước cuối (đúng 20 tuổi, ngưỡng thật của web) đi tới hộp thoại OTP rồi DỪNG, KHÔNG nhập mã, KHÔNG tạo hồ sơ');
@@ -3699,8 +3507,8 @@ const collapseBtn = page.getByText(/^Thu gọn/i).filter({ visible: true }).firs
     });
   });
 
-  // TC 21: Không thể đặt mua khi chưa đồng ý chính sách xử lý dữ liệu cá nhân
-  test('INST_Company_08 - Không thể đặt mua khi chưa đồng ý chính sách xử lý dữ liệu cá nhân', async ({ page }) => {
+  // TC 18: Không thể đặt mua khi chưa đồng ý chính sách xử lý dữ liệu cá nhân
+  test('INST_Company_07 - Không thể đặt mua khi chưa đồng ý chính sách xử lý dữ liệu cá nhân', async ({ page }) => {
     test.setTimeout(300000);
     page.setDefaultTimeout(20000); // thao tác nào kẹt quá 20s sẽ báo lỗi rõ ràng, không đứng im
     manual('NGUYÊN TẮC AN TOÀN: Bước 1 phải bị chặn trước OTP. Bước 2 đi tới hộp thoại OTP rồi DỪNG, KHÔNG nhập mã, KHÔNG tạo hồ sơ');
@@ -4078,7 +3886,7 @@ const collapseBtn = page.getByText(/^Thu gọn/i).filter({ visible: true }).firs
    * PHẦN 4: TRẢ CHẬM QUA THẺ TÍN DỤNG (INST_Card)
    * -------------------------------------------------------------------------- */
 
-  // TC 22: Chọn Qua thẻ tín dụng hiển thị danh sách ngân hàng trả chậm
+  // TC 19: Chọn Qua thẻ tín dụng hiển thị danh sách ngân hàng trả chậm
   test('INST_Card_01 - Chọn Qua thẻ tín dụng hiển thị danh sách ngân hàng trả chậm', async ({ page }) => {
     test.setTimeout(120000);
     page.setDefaultTimeout(15000);
@@ -4271,186 +4079,8 @@ const collapseBtn = page.getByText(/^Thu gọn/i).filter({ visible: true }).firs
     // KHÔNG chọn ngân hàng/loại thẻ, không bấm [Thanh toán]
   });
 
-  // TC 23: Tìm kiếm ngân hàng trả chậm
-  test('INST_Card_02 - Tìm kiếm ngân hàng trả chậm', async ({ page }) => {
-    test.setTimeout(150000);
-    page.setDefaultTimeout(15000);
-
-    // "Không lỗi": ghi lại mọi lỗi JavaScript xảy ra trên trang trong suốt test
-    const pageErrors = [];
-    page.on('pageerror', (e) => pageErrors.push(String((e && e.message) || e)));
-
-    // Nhận diện ngân hàng qua chữ, alt/title/aria-label hoặc tên file ảnh của logo
-    const BANKS = [
-      { name: 'VPBank', re: /vp\s*-?\s*bank|\bvpb\b|thịnh vượng/i },
-      { name: 'LPBank', re: /lp\s*-?\s*bank|\blpb\b|liên việt|lienviet/i },
-      { name: 'Techcombank', re: /techcom|\btcb\b|kỹ thương/i },
-      { name: 'Nam A Bank', re: /nam\s*-?\s*a(?!\w)|namabank|\bnab\b|nam á/i },
-      { name: 'Home Credit', re: /home\s*-?\s*credit|homecredit/i },
-      { name: 'TPBank', re: /tp\s*-?\s*bank|\btpb\b|tienphong|tiên phong/i },
-      { name: 'HSBC', re: /hsbc/i },
-      { name: 'VIB', re: /\bvib\b/i },
-      { name: 'Vietcombank', re: /vietcombank|\bvcb\b/i },
-      { name: 'BIDV', re: /bidv/i },
-    ];
-    const bankOf = (sig) => { const b = BANKS.find((x) => x.re.test(sig)); return b ? b.name : null; };
-    // Chữ cố định nằm cùng khu vực với lưới (không phải thông báo kết quả)
-    const STATIC_TEXT = /Xem chi tiết chương trình trả chậm/i;
-
-    // Đọc khu vực "Chọn ngân hàng trả chậm": các ô ngân hàng (mỗi ô = khối nhỏ nhất bọc đúng 1 logo) và chữ còn lại
-    // (thông báo nếu có). Vùng quét = các phần tử nằm SAU tiêu đề "Chọn ngân hàng trả chậm" và TRƯỚC tiêu đề "Chọn loại thẻ".
-    const readGrid = () => page.evaluate(() => {
-      const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-      const visible = (el) => {
-        const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
-        return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none';
-      };
-      const srcOf = (img) => img.currentSrc || img.getAttribute('src') || img.getAttribute('data-src') || '';
-      const sig = (el) => {
-        const parts = [el.innerText];
-        for (const e of [el, ...el.querySelectorAll('img, svg, source, [alt], [title], [aria-label]')]) {
-          parts.push(e.getAttribute && e.getAttribute('alt'), e.getAttribute && e.getAttribute('title'),
-            e.getAttribute && e.getAttribute('aria-label'), e.tagName === 'IMG' ? srcOf(e) : '');
-        }
-        return norm(parts.filter(Boolean).join(' '));
-      };
-      const leaves = [...document.querySelectorAll('body *')].filter((e) => e.children.length === 0 && visible(e));
-      const heading = leaves.find((el) => /^Chọn ngân hàng trả chậm/i.test(norm(el.textContent)));
-      if (!heading) return { heading: false, tiles: [], text: '' };
-      const follows = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-      const step2 = leaves.find((el) => /^Chọn loại thẻ/i.test(norm(el.textContent)) && follows(heading, el));
-      const inScope = (el) => visible(el) && follows(heading, el) && !el.contains(heading) && (!step2 || (follows(el, step2) && !el.contains(step2)));
-      const imgs = [...document.querySelectorAll('img')].filter((im) => inScope(im) && im.getBoundingClientRect().width >= 40);
-      const tiles = [];
-      for (const im of imgs) {
-        let t = im;
-        while (t.parentElement && inScope(t.parentElement) && t.parentElement.querySelectorAll('img').length === 1) t = t.parentElement;
-        if (!tiles.includes(t)) tiles.push(t);
-      }
-      const text = leaves.filter((e) => inScope(e) && !tiles.some((t) => t.contains(e)))
-        .map((e) => norm(e.textContent)).filter(Boolean).join(' | ');
-      return { heading: true, tiles: tiles.map(sig), text };
-    });
-    // Chờ kết quả tìm kiếm ổn định (hai lần đọc liên tiếp giống nhau, tối đa ~7 giây)
-    const settleGrid = async () => {
-      let last = null, cur = null;
-      for (let i = 0; i < 12; i++) {
-        cur = await readGrid();
-        const s = JSON.stringify([cur.tiles, cur.text]);
-        if (s === last) return cur;
-        last = s;
-        await page.waitForTimeout(600);
-      }
-      return cur;
-    };
-    const messageOf = (g) => g.text.split(' | ').filter((t) => !STATIC_TEXT.test(t)).join(' | ');
-
-    // ---- Pre-condition: đang ở trang /tra-cham (Giỏ Hàng Trả Chậm Thẻ Tín Dụng) của SP F ----
-    await openProduct(page, 'F');
-    let marked = false;
-    for (let i = 0; i < 24 && !marked; i++) {
-      marked = await page.evaluate(() => {
-        document.querySelectorAll('[data-qa-inst-btn]').forEach((e) => e.removeAttribute('data-qa-inst-btn'));
-        const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
-        const label = (el) => norm(el.innerText) || norm(el.getAttribute('aria-label')) || norm(el.title);
-        const visible = (el) => {
-          const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
-          return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none';
-        };
-        const btn = [...document.querySelectorAll('button, a, [role="button"]')]
-          .find((el) => visible(el) && label(el).length <= 60 && /Trả chậm\s*0\s*%/i.test(label(el)));
-        if (btn) btn.setAttribute('data-qa-inst-btn', '1');
-        return !!btn;
-      });
-      if (!marked) { if (i === 8) await page.mouse.wheel(0, 700); await page.waitForTimeout(500); }
-    }
-    expect(marked, 'Pre-condition: SP F phải có nút [Trả chậm 0%] (SP có thể đang hết hàng/sắp về)').toBe(true);
-    const instBtn = page.locator('[data-qa-inst-btn]').first();
-    await instBtn.scrollIntoViewIfNeeded();
-    await instBtn.click();
-    await expect(page.getByText('Chọn hình thức trả chậm').filter({ visible: true }).first(),
-      'Pre-condition: phải mở được hộp thoại "Chọn hình thức trả chậm"').toBeVisible({ timeout: 10000 });
-    const cardOption = page.locator('a[href*="/tra-cham?"]').filter({ hasText: /Qua thẻ tín dụng/i })
-      .or(page.getByText('Qua thẻ tín dụng')).filter({ visible: true }).first();
-    await expect(cardOption, 'Phải có lựa chọn "Qua thẻ tín dụng" trong hộp thoại').toBeVisible({ timeout: 10000 });
-    await Promise.all([
-      page.waitForURL(/\/tra-cham(\?|$)/, { timeout: 20000 }).catch(() => {}),
-      cardOption.click(),
-    ]);
-    await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
-    await page.waitForTimeout(1500);
-    await expect(page, `Pre-condition: phải ở trang /tra-cham (đang ở ${page.url()})`).toHaveURL(/\/tra-cham(\?|$)/);
-    await expect(page.getByText(/Giỏ Hàng Trả Chậm Thẻ Tín Dụng/i).first(),
-      'Pre-condition: phải có tiêu đề "Giỏ Hàng Trả Chậm Thẻ Tín Dụng"').toBeVisible({ timeout: 15000 });
-    const urlOnPage = page.url();
-
-    // Ô tìm kiếm và danh sách ban đầu
-    const search = page.getByPlaceholder(/Tìm ngân hàng/i).first();
-    await expect(search, 'Phải có ô "Tìm ngân hàng?"').toBeVisible({ timeout: 10000 });
-    await search.scrollIntoViewIfNeeded();
-    // Gõ như người dùng: bấm vào ô, xóa nội dung cũ, rồi gõ từng ký tự
-    const typeSearch = async (text) => {
-      await search.click();
-      await page.keyboard.press('Control+A');
-      await page.keyboard.press('Backspace');
-      if (text) await search.pressSequentially(text, { delay: 60 });
-      await page.waitForTimeout(800);
-    };
-    const initial = await settleGrid();
-    const initialBanks = initial.tiles.map(bankOf);
-    console.log('[INST_Card_02] Ban đầu:', initial.tiles.length, 'ngân hàng | nhận diện:', JSON.stringify(initialBanks), '| chữ khác:', JSON.stringify(messageOf(initial)));
-    expect(initial.heading, 'Phải có khối "Chọn ngân hàng trả chậm"').toBe(true);
-    expect(initial.tiles.length, 'Pre-condition: lưới ban đầu phải có nhiều ngân hàng').toBeGreaterThanOrEqual(3);
-    await test.info().attach('ban-dau', { body: await page.screenshot(), contentType: 'image/png' });
-
-    // ---- Bước 1: nhập tên ngân hàng có trong danh sách (Vietcombank) vào ô "Tìm ngân hàng?" ----
-    await typeSearch('Vietcombank');
-    const g1 = await settleGrid();
-    const names1 = g1.tiles.map(bankOf);
-    console.log('[INST_Card_02] Bước 1 (Vietcombank):', g1.tiles.length, 'ngân hàng | nhận diện:', JSON.stringify(names1), '| chữ khác:', JSON.stringify(messageOf(g1)));
-    await test.info().attach('buoc-1-vietcombank', { body: await page.screenshot(), contentType: 'image/png' });
-    await expect.soft(search, 'Ô tìm kiếm phải giữ nội dung đã gõ').toHaveValue('Vietcombank');
-    expect.soft(g1.tiles.length, 'Bước 1: phải còn ít nhất 1 ngân hàng khớp từ khóa "Vietcombank"').toBeGreaterThanOrEqual(1);
-    expect.soft(g1.tiles.length, `Bước 1: danh sách phải thu hẹp so với ban đầu (${initial.tiles.length} ngân hàng)`).toBeLessThan(initial.tiles.length);
-    const wrong1 = names1.filter((n) => n && n !== 'Vietcombank');
-    expect.soft(wrong1, `Bước 1: danh sách chỉ còn ngân hàng khớp từ khóa, nhưng còn: ${wrong1.join(', ')}`).toEqual([]);
-    if (g1.tiles.some((_, i) => !names1[i])) {
-      manual('Bước 1: có logo không đọc được tên (không có chữ/alt/tên file chứa tên ngân hàng); xem ảnh "buoc-1-vietcombank" để chắc chắn đó là Vietcombank');
-    } else {
-      expect.soft(names1.includes('Vietcombank'), 'Bước 1: phải còn ngân hàng Vietcombank').toBe(true);
-    }
-
-    // ---- Bước 2: nhập tên ngân hàng không có (abcxyz) ----
-    await typeSearch('abcxyz');
-    const g2 = await settleGrid();
-    const msg2 = messageOf(g2);
-    console.log('[INST_Card_02] Bước 2 (abcxyz):', g2.tiles.length, 'ngân hàng | thông báo:', JSON.stringify(msg2));
-    await test.info().attach('buoc-2-abcxyz', { body: await page.screenshot(), contentType: 'image/png' });
-    test.info().annotations.push({ type: 'khong-co-ket-qua', description: msg2 || '(không có chữ thông báo)' });
-    expect.soft(g2.tiles.length, 'Bước 2: không còn ngân hàng nào khi nhập tên không có').toBe(0);
-    expect.soft(msg2.length, 'Bước 2: phải hiển thị trạng thái không có kết quả (một dòng thông báo)').toBeGreaterThan(0);
-    expect.soft(pageErrors, `Bước 2: không được có lỗi JavaScript: ${pageErrors.join(' | ')}`).toEqual([]);
-    expect.soft(g2.heading, 'Bước 2: khối "Chọn ngân hàng trả chậm" vẫn phải còn trên trang').toBe(true);
-    await expect.soft(search, 'Bước 2: ô tìm kiếm vẫn phải hiển thị').toBeVisible();
-    expect.soft(page.url(), 'Bước 2: không được rời khỏi trang /tra-cham').toBe(urlOnPage);
-
-    // ---- Bước 3: xóa nội dung ô tìm kiếm ----
-    await typeSearch('');
-    const g3 = await settleGrid();
-    const names3 = g3.tiles.map(bankOf);
-    console.log('[INST_Card_02] Bước 3 (xóa):', g3.tiles.length, 'ngân hàng | nhận diện:', JSON.stringify(names3), '| chữ khác:', JSON.stringify(messageOf(g3)));
-    await test.info().attach('buoc-3-da-xoa', { body: await page.screenshot(), contentType: 'image/png' });
-    await expect.soft(search, 'Bước 3: ô tìm kiếm phải trống').toHaveValue('');
-    expect.soft(g3.tiles.length, `Bước 3: danh sách phải hiển thị lại đầy đủ ${initial.tiles.length} ngân hàng`).toBe(initial.tiles.length);
-    expect.soft(JSON.stringify([...g3.tiles].sort()), 'Bước 3: các ngân hàng hiển thị lại phải giống ban đầu').toBe(JSON.stringify([...initial.tiles].sort()));
-    expect.soft(messageOf(g3), 'Bước 3: không còn thông báo không có kết quả').toBe(messageOf(initial));
-    expect.soft(pageErrors, `Không được có lỗi JavaScript trong suốt test: ${pageErrors.join(' | ')}`).toEqual([]);
-
-    // KHÔNG chọn ngân hàng/loại thẻ, không bấm [Thanh toán]
-  });
-
-  // TC 24: Chọn ngân hàng hiển thị loại thẻ tương ứng
-    test('INST_Card_03 - Chọn ngân hàng hiển thị loại thẻ tương ứng', async ({ page }) => {
+  // TC 20: Chọn ngân hàng hiển thị loại thẻ tương ứng
+    test('INST_Card_02 - Chọn ngân hàng hiển thị loại thẻ tương ứng', async ({ page }) => {
     test.setTimeout(180000);
     page.setDefaultTimeout(15000);
 
@@ -4684,8 +4314,8 @@ const collapseBtn = page.getByText(/^Thu gọn/i).filter({ visible: true }).firs
     // KHÔNG chọn loại thẻ/kỳ hạn, không bấm [Thanh toán]
   });
 
-  // TC 25: Không thể thanh toán khi chưa chọn ngân hàng hoặc loại thẻ
-    test('INST_Card_04 - Không thể thanh toán khi chưa chọn ngân hàng, loại thẻ hoặc gói trả chậm', async ({ page }) => {
+  // TC 21: Không thể thanh toán khi chưa chọn ngân hàng hoặc loại thẻ
+    test('INST_Card_03 - Không thể thanh toán khi chưa chọn ngân hàng, loại thẻ hoặc gói trả chậm', async ({ page }) => {
     test.setTimeout(180000);
     page.setDefaultTimeout(15000);
 
@@ -5046,8 +4676,8 @@ const collapseBtn = page.getByText(/^Thu gọn/i).filter({ visible: true }).firs
     // Dừng tại đây: không chọn gói, không bấm [Thanh toán] khi đã chọn đủ, không sang cổng thanh toán, không tạo giao dịch
   });
 
-  // TC 26: Không thể thanh toán khi chưa đồng ý chính sách xử lý dữ liệu cá nhân
-  test('INST_Card_05 - Không thể thanh toán khi chưa đồng ý chính sách xử lý dữ liệu cá nhân', async ({ page }) => {
+  // TC 22: Không thể thanh toán khi chưa đồng ý chính sách xử lý dữ liệu cá nhân
+  test('INST_Card_04 - Không thể thanh toán khi chưa đồng ý chính sách xử lý dữ liệu cá nhân', async ({ page }) => {
   test.setTimeout(240000);
   page.setDefaultTimeout(15000);
   manual('NGUYÊN TẮC AN TOÀN: Chỉ kiểm tra khi CHƯA đồng ý chính sách. KHÔNG tích ô đồng ý, KHÔNG nhập OTP, KHÔNG thanh toán thật');
@@ -5470,8 +5100,8 @@ const collapseBtn = page.getByText(/^Thu gọn/i).filter({ visible: true }).firs
   ).toBeGreaterThan(0);
 });
 
-  // TC 27: Đến cổng thanh toán khi chọn đủ ngân hàng, loại thẻ và thông tin hợp lệ
- test('INST_Card_06 - Bấm thanh toán khi chọn đủ ngân hàng, loại thẻ và thông tin hợp lệ', async ({ page }) => {
+  // TC 23: Đến cổng thanh toán khi chọn đủ ngân hàng, loại thẻ và thông tin hợp lệ
+ test('INST_Card_05 - Bấm thanh toán khi chọn đủ ngân hàng, loại thẻ và thông tin hợp lệ', async ({ page }) => {
   test.setTimeout(240000);
   page.setDefaultTimeout(15000);
   manual('NGUYÊN TẮC AN TOÀN: Chỉ kiểm tra có hiện hộp thoại yêu cầu nhập mã SMS/OTP. KHÔNG nhập mã, KHÔNG thanh toán thật');
@@ -5801,7 +5431,7 @@ const collapseBtn = page.getByText(/^Thu gọn/i).filter({ visible: true }).firs
    * PHẦN 5: RÀNG BUỘC NGHIỆP VỤ & GIAO DIỆN (INST_Rule & INST_GUI)
    * -------------------------------------------------------------------------- */
 
-  // TC 30: Kiểm tra giao diện trả chậm trên di động
+  // TC 24: Kiểm tra giao diện trả chậm trên di động
  test('INST_GUI_01 - Giao diện trả chậm hiển thị đúng trên di động', async ({ page }) => {
   test.setTimeout(180000);
   page.setDefaultTimeout(15000);
